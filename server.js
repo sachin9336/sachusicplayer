@@ -40,7 +40,11 @@ console.log("🎵 Sd Music Player Backend Starting...");
 // ✅ CORS Configuration
 app.use(
   cors({
-    origin: ["http://localhost:5173", "https://sachusicplayerfrontend-15y5.vercel.app"],
+    origin: [
+      "http://localhost:5173",
+      "https://sachusicplayerfrontend-15y5.vercel.app",
+      "https://sachusicplayerfrontend-15y5-bdpogfrt1.vercel.app" // ✅ Added new origin
+    ],
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     credentials: true,
   })
