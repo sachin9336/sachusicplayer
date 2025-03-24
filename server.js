@@ -115,16 +115,23 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
 
     console.log("📂 Files received:", req.files);
 
-    const [audioResult, imageResult] = await Promise.all([
-      cloudinary.uploader.upload_stream({ resource_type: "video", folder: "music_uploads" }, (error, result) => {
-        if (error) throw error;
-        return result;
-      }).end(req.files.audioFile[0].buffer),
-      cloudinary.uploader.upload_stream({ resource_type: "image", folder: "cover_images" }, (error, result) => {
-        if (error) throw error;
-        return result;
-      }).end(req.files.coverImage[0].buffer),
-    ]);
+    const audioPromise = new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream({ resource_type: "video", folder: "music_uploads" }, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+      stream.end(req.files.audioFile[0].buffer);
+    });
+
+    const imagePromise = new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream({ resource_type: "image", folder: "cover_images" }, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+      stream.end(req.files.coverImage[0].buffer);
+    });
+
+    const [audioResult, imageResult] = await Promise.all([audioPromise, imagePromise]);
 
     const newSong = await Song.create({
       title: req.body.title || "Untitled",
@@ -140,7 +147,7 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
     });
   } catch (err) {
     console.error("❌ File Upload Error:", err.message);
-    res.status(500).json({ message: "Failed to upload files" });
+    res.status(500).json({ message: "Failed to upload files", error: err.message });
   }
 });
 
