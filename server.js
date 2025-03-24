@@ -37,7 +37,15 @@ mongoose
 
 console.log("🎵 Sd Music Player Backend Starting...");
 
-app.use(cors({ origin: "http://localhost:5173", credentials: true }));
+// ✅ CORS Configuration
+app.use(
+  cors({
+    origin: ["http://localhost:5173", "https://sachusicplayerfrontend-15y5.vercel.app"],
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    credentials: true,
+  })
+);
+
 app.use(express.json());
 
 const storage = multer.memoryStorage();
