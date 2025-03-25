@@ -4,6 +4,7 @@ import cors from "cors";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import path from "path";
 import cloudinary from "./config/cloudinary.js";
 import Song from "./models/Song.js";
 import Playlist from "./models/Playlist.js";
@@ -47,6 +48,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
+      // Agar origin undefined ho (e.g., curl, Postman) tab bhi allow karo
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -78,7 +80,7 @@ const verifyToken = (req, res, next) => {
   }
 };
 
-// ✅ Routes
+// ✅ API Routes
 app.use("/api/admin", adminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/songs", songsRoutes);
@@ -118,18 +120,24 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
     console.log("📂 Files received:", req.files);
 
     const audioPromise = new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream({ resource_type: "video", folder: "music_uploads" }, (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      });
+      const stream = cloudinary.uploader.upload_stream(
+        { resource_type: "video", folder: "music_uploads" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
       stream.end(req.files.audioFile[0].buffer);
     });
 
     const imagePromise = new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream({ resource_type: "image", folder: "cover_images" }, (error, result) => {
-        if (error) reject(error);
-        else resolve(result);
-      });
+      const stream = cloudinary.uploader.upload_stream(
+        { resource_type: "image", folder: "cover_images" },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
       stream.end(req.files.coverImage[0].buffer);
     });
 
@@ -151,6 +159,16 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
     console.error("❌ File Upload Error:", err.message);
     res.status(500).json({ message: "Failed to upload files", error: err.message });
   }
+});
+
+// ✅ Serve React Frontend (If Frontend Build is served from Same Domain)
+// Agar tum apne React frontend ko backend ke saath serve karna chahte ho, to is code ko enable karo.
+// Note: Agar frontend alag host pe hai, to iski zarurat nahi hai.
+import path from "path";
+const __dirname = path.resolve();
+app.use(express.static(path.join(__dirname, "frontend", "dist")));
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
 });
 
 // ✅ Home Route
