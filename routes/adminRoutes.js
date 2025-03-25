@@ -1,5 +1,4 @@
 import express from "express";
-import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import Admin from "../models/Admin.js";
@@ -11,7 +10,7 @@ const router = express.Router();
 // ✅ Debugging Logs
 console.log("✅ Admin Routes Loaded");
 
-// ✅ Create Admin (With Hashed Password)
+// ✅ Create Admin (Without Hashing)
 router.post("/create-admin", async (req, res) => {
   console.log("🛠 Create Admin API Hit");
 
@@ -31,11 +30,8 @@ router.post("/create-admin", async (req, res) => {
       return res.status(400).json({ message: "Admin already exists" });
     }
 
-    // ✅ Hash Password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // ✅ Create new admin with hashed password
-    const newAdmin = new Admin({ username, password: hashedPassword });
+    // ✅ Create new admin (WITHOUT HASHING)
+    const newAdmin = new Admin({ username, password });
     await newAdmin.save();
 
     console.log("✅ Admin Created Successfully!");
@@ -46,7 +42,7 @@ router.post("/create-admin", async (req, res) => {
   }
 });
 
-// ✅ Admin Login Route (With Hashed Password Check)
+// ✅ Admin Login Route (Without Hashed Password Check)
 router.post("/login", async (req, res) => {
   console.log("🛠 Admin Login API Hit");
   console.log("📥 Received Data:", req.body);
@@ -61,9 +57,8 @@ router.post("/login", async (req, res) => {
       return res.status(403).json({ message: "Admin not found" });
     }
 
-    // ✅ Compare Hashed Password
-    const isMatch = await bcrypt.compare(password, admin.password);
-    if (!isMatch) {
+    // ✅ Directly Compare Plain Text Password
+    if (password !== admin.password) {
       console.log("❌ Password Mismatch");
       return res.status(403).json({ message: "Invalid credentials" });
     }
