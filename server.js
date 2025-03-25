@@ -24,7 +24,7 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-// ✅ Connect to MongoDB Atlas
+// ✅ MongoDB Atlas Connection
 mongoose
   .connect(MONGO_URI, {
     useNewUrlParser: true,
@@ -38,9 +38,8 @@ mongoose
 
 console.log("🎵 Sd Music Player Backend Starting...");
 
-// ✅ CORS Configuration
+// ✅ CORS Configuration (Only Allow Deployed Frontend)
 const allowedOrigins = [
-  "http://localhost:5173",
   "https://sachusicplayerfrontend-15y5.vercel.app",
   "https://sachusicplayerfrontend-15y5-bdpogfrt1.vercel.app",
 ];
@@ -51,19 +50,22 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+        callback(new Error("❌ Not allowed by CORS"));
       }
     },
-    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
 
 app.use(express.json());
 
+// ✅ Multer Setup for File Uploads
 const storage = multer.memoryStorage();
 const upload = multer({ storage });
 
+// ✅ JWT Token Verification Middleware
 const verifyToken = (req, res, next) => {
   try {
     const token = req.headers["authorization"]?.split(" ")[1];
