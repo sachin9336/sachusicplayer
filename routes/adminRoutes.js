@@ -1,4 +1,5 @@
 import express from "express";
+import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import Admin from "../models/Admin.js";
@@ -10,7 +11,7 @@ const router = express.Router();
 // ✅ Debugging Logs
 console.log("✅ Admin Routes Loaded");
 
-// ✅ Create Admin Route (Without Hashing)
+// ✅ Create Admin (With Hashed Password)
 router.post("/create-admin", async (req, res) => {
   console.log("🛠 Create Admin API Hit");
 
@@ -30,8 +31,11 @@ router.post("/create-admin", async (req, res) => {
       return res.status(400).json({ message: "Admin already exists" });
     }
 
-    // ✅ Create new admin (Without Hashing)
-    const newAdmin = new Admin({ username, password });
+    // ✅ Hash Password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // ✅ Create new admin with hashed password
+    const newAdmin = new Admin({ username, password: hashedPassword });
     await newAdmin.save();
 
     console.log("✅ Admin Created Successfully!");
@@ -42,7 +46,7 @@ router.post("/create-admin", async (req, res) => {
   }
 });
 
-// ✅ Admin Login Route (Without Hashing)
+// ✅ Admin Login Route (With Hashed Password Check)
 router.post("/login", async (req, res) => {
   console.log("🛠 Admin Login API Hit");
   console.log("📥 Received Data:", req.body);
@@ -57,12 +61,14 @@ router.post("/login", async (req, res) => {
       return res.status(403).json({ message: "Admin not found" });
     }
 
-    // ✅ Simple Password Comparison (Without Hashing)
-    if (password !== admin.password) {
+    // ✅ Compare Hashed Password
+    const isMatch = await bcrypt.compare(password, admin.password);
+    if (!isMatch) {
       console.log("❌ Password Mismatch");
       return res.status(403).json({ message: "Invalid credentials" });
     }
 
+    // ✅ Generate Token
     const token = jwt.sign(
       { id: admin._id },
       process.env.JWT_SECRET || "default_secret",
@@ -89,7 +95,7 @@ router.get("/admin", async (req, res) => {
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET || "default_secret");
-    const admin = await Admin.findById(decoded.id).select("-password"); // Password hide karo
+    const admin = await Admin.findById(decoded.id).select("-password"); // Hide password
 
     if (!admin) {
       return res.status(404).json({ message: "Admin not found" });
