@@ -48,7 +48,7 @@ const allowedOrigins = [
 app.use(
   cors({
     origin: function (origin, callback) {
-      // Agar origin undefined ho (jaise Postman/curl), toh allow karo
+      // Agar origin undefined ho (jaise Postman/curl), tab bhi allow karo
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -161,13 +161,14 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
   }
 });
 
-// ✅ Serve React Frontend (If Frontend Build is served from Same Domain)
-// Agar tum apne React frontend ko backend ke saath serve karna chahte ho, to niche code enable karo.
-// Note: Agar frontend alag host par hai, to iski zarurat nahi hai.
-app.use(express.static(path.join(path.resolve(), "frontend", "dist")));
-app.get("*", (req, res) => {
-  res.sendFile(path.join(path.resolve(), "frontend", "dist", "index.html"));
-});
+// ✅ (Optional) Serve React Frontend if hosted on the same domain
+// Agar tumhara frontend Vercel par deploy hai aur alag domain par hai, to is block ko comment ya remove kar do.
+// import path from "path";  // Already imported at the top
+// const __dirname = path.resolve();
+// app.use(express.static(path.join(__dirname, "frontend", "dist")));
+// app.get("*", (req, res) => {
+//   res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
+// });
 
 // ✅ Home Route
 app.get("/", (req, res) => {
