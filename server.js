@@ -4,7 +4,6 @@ import cors from "cors";
 import mongoose from "mongoose";
 import jwt from "jsonwebtoken";
 import multer from "multer";
-import path from "path";
 import cloudinary from "./config/cloudinary.js";
 import Song from "./models/Song.js";
 import Playlist from "./models/Playlist.js";
@@ -20,17 +19,9 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGO_URI = process.env.MONGO_URI;
 
-if (!MONGO_URI) {
-  console.error("❌ Error: MONGO_URI is not defined in .env file!");
-  process.exit(1);
-}
-
 // ✅ MongoDB Atlas Connection
 mongoose
-  .connect(MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  })
+  .connect(MONGO_URI)
   .then(() => console.log("✅ MongoDB Atlas Connected!"))
   .catch((err) => {
     console.error("❌ DB Connection Error:", err.message);
@@ -39,7 +30,7 @@ mongoose
 
 console.log("🎵 Sd Music Player Backend Starting...");
 
-// ✅ CORS Configuration (Only Allow Deployed Frontend)
+// ✅ CORS Configuration
 const allowedOrigins = [
   "https://sachusicplayerfrontend-15y5.vercel.app",
   "https://sachusicplayerfrontend-15y5-bdpogfrt1.vercel.app",
@@ -47,12 +38,11 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: function (origin, callback) {
-      // Agar origin undefined ho (jaise Postman/curl), tab bhi allow karo
+    origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
-        callback(new Error("❌ Not allowed by CORS"));
+        callback(new Error("❌ CORS Error: Not allowed"));
       }
     },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE"],
@@ -71,12 +61,16 @@ const upload = multer({ storage });
 const verifyToken = (req, res, next) => {
   try {
     const token = req.headers["authorization"]?.split(" ")[1];
-    if (!token) return res.status(403).json({ message: "No token provided" });
-
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-    next();
+    if (!token) {
+      return res.status(403).json({ message: "❌ No token provided" });
+    }
+    jwt.verify(token, process.env.JWT_SECRET, (err, decoded) => {
+      if (err) return res.status(401).json({ message: "❌ Invalid token" });
+      req.user = decoded;
+      next();
+    });
   } catch (error) {
-    return res.status(401).json({ message: "Invalid token" });
+    return res.status(401).json({ message: "❌ Unauthorized" });
   }
 };
 
@@ -94,7 +88,7 @@ app.get("/api/songs/home", async (req, res) => {
     res.json(songs);
   } catch (err) {
     console.error("❌ Error fetching songs:", err.message);
-    res.status(500).json({ message: "Failed to fetch songs" });
+    res.status(500).json({ message: "❌ Failed to fetch songs" });
   }
 });
 
@@ -102,11 +96,11 @@ app.get("/api/songs/home", async (req, res) => {
 app.get("/api/playlists/:playlistId/songs", async (req, res) => {
   try {
     const playlist = await Playlist.findById(req.params.playlistId).populate("songs");
-    if (!playlist) return res.status(404).json({ message: "Playlist not found" });
+    if (!playlist) return res.status(404).json({ message: "❌ Playlist not found" });
     res.json(playlist.songs);
   } catch (err) {
     console.error("❌ Error fetching playlist songs:", err.message);
-    res.status(500).json({ message: "Failed to fetch playlist songs" });
+    res.status(500).json({ message: "❌ Failed to fetch playlist songs" });
   }
 });
 
@@ -114,35 +108,31 @@ app.get("/api/playlists/:playlistId/songs", async (req, res) => {
 app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "coverImage" }]), async (req, res) => {
   try {
     if (!req.files?.audioFile || !req.files?.coverImage) {
-      return res.status(400).json({ message: "Audio file and cover image are required!" });
+      return res.status(400).json({ message: "❌ Audio file and cover image are required!" });
     }
 
     console.log("📂 Files received:", req.files);
 
-    const audioPromise = new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { resource_type: "video", folder: "music_uploads" },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      stream.end(req.files.audioFile[0].buffer);
-    });
+    // ✅ Upload to Cloudinary
+    const uploadToCloudinary = (file, resourceType) => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { resource_type: resourceType, folder: resourceType === "video" ? "music_uploads" : "cover_images" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(file.buffer);
+      });
+    };
 
-    const imagePromise = new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream(
-        { resource_type: "image", folder: "cover_images" },
-        (error, result) => {
-          if (error) reject(error);
-          else resolve(result);
-        }
-      );
-      stream.end(req.files.coverImage[0].buffer);
-    });
+    const [audioResult, imageResult] = await Promise.all([
+      uploadToCloudinary(req.files.audioFile[0], "video"),
+      uploadToCloudinary(req.files.coverImage[0], "image"),
+    ]);
 
-    const [audioResult, imageResult] = await Promise.all([audioPromise, imagePromise]);
-
+    // ✅ Save Song to Database
     const newSong = await Song.create({
       title: req.body.title || "Untitled",
       artist: req.body.artist || "Unknown",
@@ -157,18 +147,9 @@ app.post("/api/songs/upload", upload.fields([{ name: "audioFile" }, { name: "cov
     });
   } catch (err) {
     console.error("❌ File Upload Error:", err.message);
-    res.status(500).json({ message: "Failed to upload files", error: err.message });
+    res.status(500).json({ message: "❌ Failed to upload files", error: err.message });
   }
 });
-
-// ✅ (Optional) Serve React Frontend if hosted on the same domain
-// Agar tumhara frontend Vercel par deploy hai aur alag domain par hai, to is block ko comment ya remove kar do.
-// import path from "path";  // Already imported at the top
-// const __dirname = path.resolve();
-// app.use(express.static(path.join(__dirname, "frontend", "dist")));
-// app.get("*", (req, res) => {
-//   res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
-// });
 
 // ✅ Home Route
 app.get("/", (req, res) => {
@@ -178,7 +159,7 @@ app.get("/", (req, res) => {
 // ✅ Global Error Handling Middleware
 app.use((err, req, res, next) => {
   console.error("❌ Server Error:", err.message);
-  res.status(500).json({ message: "Internal Server Error", error: err.message });
+  res.status(500).json({ message: "❌ Internal Server Error" });
 });
 
 // ✅ Start Server
