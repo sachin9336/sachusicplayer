@@ -13,11 +13,11 @@ const uploadSong = async (req, res) => {
 
     console.log("🚀 Uploading files to Cloudinary...");
 
-    // ✅ Audio file upload to Cloudinary
+    // ✅ Audio file upload to Cloudinary (Fixed `resource_type`)
     console.log("🎵 Uploading Audio File...");
     const audioUpload = new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: "video", folder: "songs/" },
+        { resource_type: "auto", folder: "songs/" },  // ✅ FIXED
         (error, result) => {
           if (error) {
             console.error("❌ Audio Upload Failed:", error.message);
@@ -53,8 +53,12 @@ const uploadSong = async (req, res) => {
     const [audioResult, imageResult] = await Promise.all([audioUpload, imageUpload]);
 
     console.log("✅ All files uploaded successfully!");
-    console.log("🎵 Final Audio URL:", audioResult.secure_url);
-    console.log("🖼 Final Cover Image URL:", imageResult.secure_url);
+    console.log("🎵 Final Audio URL:", audioResult?.secure_url || "Upload Failed!");
+    console.log("🖼 Final Cover Image URL:", imageResult?.secure_url || "Upload Failed!");
+
+    if (!audioResult.secure_url) {
+      return res.status(500).json({ message: "❌ Audio Upload Failed!" });
+    }
 
     // ✅ MongoDB me song save karo
     console.log("💾 Saving song details in MongoDB...");
