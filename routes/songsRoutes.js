@@ -3,6 +3,7 @@ import multer from "multer";
 import cloudinary from "../config/cloudinary.js";
 import Song from "../models/Song.js";
 import dotenv from "dotenv";
+import mongoose from "mongoose";
 
 dotenv.config();
 
@@ -37,22 +38,17 @@ router.post("/upload", upload.fields([{ name: "audioFile" }, { name: "coverImage
             uploadStream.end(req.files.coverImage[0].buffer);
         });
 
-        // ✅ Extract public IDs from URLs
-        const audioPublicId = audioResult.public_id;
-        const imagePublicId = imageResult.public_id;
-
         // ✅ Save song info in MongoDB
         const newSong = new Song({
             title: title || "Untitled",
             artist: artist || "Unknown",
             audioUrl: audioResult.secure_url,
             imageUrl: imageResult.secure_url,
-            cloudinaryAudioId: audioPublicId,  // ✅ Store Cloudinary public_id for easy deletion
-            cloudinaryImageId: imagePublicId,
+            cloudinaryAudioId: audioResult.public_id,
+            cloudinaryImageId: imageResult.public_id,
         });
 
         await newSong.save();
-
         res.json({ message: "✅ Song Uploaded Successfully!", song: newSong });
     } catch (error) {
         console.error("❌ Upload Error:", error.message);
@@ -64,15 +60,7 @@ router.post("/upload", upload.fields([{ name: "audioFile" }, { name: "coverImage
 router.get("/", async (req, res) => {
     try {
         const songs = await Song.find().sort({ createdAt: -1 });
-
-        // ✅ Extract public IDs correctly
-        const formattedSongs = songs.map(song => ({
-            ...song.toObject(),
-            audioPublicId: song.cloudinaryAudioId,
-            imagePublicId: song.cloudinaryImageId
-        }));
-
-        res.status(200).json(formattedSongs);
+        res.status(200).json(songs);
     } catch (error) {
         console.error("❌ Fetch Error:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
@@ -81,18 +69,16 @@ router.get("/", async (req, res) => {
 
 // ✅ Get a single song by ID
 router.get("/:songId", async (req, res) => {
+    const { songId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(songId)) {
+        return res.status(400).json({ error: "⚠️ Invalid song ID format" });
+    }
+    
     try {
-        const song = await Song.findById(req.params.songId);
+        const song = await Song.findById(songId);
         if (!song) return res.status(404).json({ error: "⚠️ Song not found" });
-
-        // ✅ Extract public IDs correctly
-        const formattedSong = {
-            ...song.toObject(),
-            audioPublicId: song.cloudinaryAudioId,
-            imagePublicId: song.cloudinaryImageId
-        };
-
-        res.status(200).json(formattedSong);
+        res.status(200).json(song);
     } catch (error) {
         console.error("❌ Fetch Error:", error.message);
         res.status(500).json({ error: "Internal Server Error" });
@@ -101,16 +87,15 @@ router.get("/:songId", async (req, res) => {
 
 // ✅ Update a song
 router.put("/:songId", async (req, res) => {
+    const { songId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(songId)) {
+        return res.status(400).json({ error: "⚠️ Invalid song ID format" });
+    }
+    
     try {
         const { title, artist } = req.body;
-        const song = await Song.findByIdAndUpdate(
-            req.params.songId,
-            { title, artist },
-            { new: true }
-        );
-
+        const song = await Song.findByIdAndUpdate(songId, { title, artist }, { new: true });
         if (!song) return res.status(404).json({ error: "⚠️ Song not found" });
-
         res.status(200).json({ message: "✅ Song Updated Successfully!", song });
     } catch (error) {
         console.error("❌ Update Error:", error.message);
@@ -118,33 +103,27 @@ router.put("/:songId", async (req, res) => {
     }
 });
 
-// ✅ Delete a song with Cloudinary cleanup & admin password verification
+// ✅ Delete a song with Cloudinary cleanup
 router.delete("/:songId", express.json(), async (req, res) => {
+    const { songId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(songId)) {
+        return res.status(400).json({ error: "⚠️ Invalid song ID format" });
+    }
+    
     try {
         const { password } = req.body;
-
         if (password !== process.env.ADMIN_PASSWORD) {
             return res.status(401).json({ error: "⚠️ Unauthorized! Incorrect Admin Password." });
         }
 
-        const song = await Song.findById(req.params.songId);
+        const song = await Song.findById(songId);
         if (!song) return res.status(404).json({ error: "⚠️ Song not found" });
 
         // ✅ Delete song files from Cloudinary
-        try {
-            if (song.cloudinaryAudioId) {
-                await cloudinary.uploader.destroy(song.cloudinaryAudioId, { resource_type: "video" });
-            }
-            if (song.cloudinaryImageId) {
-                await cloudinary.uploader.destroy(song.cloudinaryImageId, { resource_type: "image" });
-            }
-        } catch (cloudinaryError) {
-            console.error("❌ Cloudinary Deletion Error:", cloudinaryError.message);
-        }
-
-        // ✅ Delete song from MongoDB
-        await Song.findByIdAndDelete(req.params.songId);
-
+        if (song.cloudinaryAudioId) await cloudinary.uploader.destroy(song.cloudinaryAudioId, { resource_type: "video" });
+        if (song.cloudinaryImageId) await cloudinary.uploader.destroy(song.cloudinaryImageId, { resource_type: "image" });
+        
+        await Song.findByIdAndDelete(songId);
         res.status(200).json({ message: "✅ Song Deleted Successfully!" });
     } catch (error) {
         console.error("❌ Deletion Error:", error.message);
